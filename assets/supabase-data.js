@@ -316,7 +316,16 @@ async function customerLookup(phone){
   const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Unable to find profile.");
   const d=String(phone||"").replace(/\D/g,"").slice(-10),key=`phone:${d}`,family=safeParse(localStorage.getItem("icuFamilyV1"),{}),prefs=safeParse(localStorage.getItem("icuPreferencesV1"),{});
   if(j.profile){family[key]=j.profile.family||[];prefs[key]=j.profile.preferences||{};rawSet("icuFamilyV1",family);rawSet("icuPreferencesV1",prefs)}
-  return j.appointments||[];
+  const appointments=Array.isArray(j.appointments)?j.appointments:[];
+  const appointmentIds=new Set(appointments.map(a=>a?.id).filter(Boolean));
+  const existingMessages=safeParse(localStorage.getItem("icuAppointmentMessagesV1"),[]);
+  const keep=Array.isArray(existingMessages)?existingMessages.filter(m=>!appointmentIds.has(m?.appointmentId)):[];
+  const cloudMessages=Array.isArray(j.messages)?j.messages:[];
+  const byId=new Map();
+  [...keep,...cloudMessages].forEach(m=>{if(m?.id)byId.set(m.id,m)});
+  rawSet("icuAppointmentMessagesV1",[...byId.values()].sort((a,b)=>new Date(a.createdAt||0)-new Date(b.createdAt||0)));
+  window.dispatchEvent(new Event("icuCustomerMessagesChanged"));
+  return appointments;
 }
 async function saveCustomerProfile(phone,family,preferences){
   const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"save_profile",phone,family,preferences})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Profile could not be saved.");return true;

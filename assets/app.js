@@ -825,6 +825,19 @@ function customerSessionPhone(){return normalizePhone(sessionStorage.getItem(CUS
 function signedInCustomer(){const phone=customerSessionPhone();return phone?customerByLookup(phone):null}
 function setCustomerSession(customerOrPhone){const phone=normalizePhone(typeof customerOrPhone==="string"?customerOrPhone:customerOrPhone?.phone);if(phone)sessionStorage.setItem(CUSTOMER_SESSION_PHONE_KEY,phone);updateCustomerSessionUi();return phone}
 function clearCustomerSession(){sessionStorage.removeItem(CUSTOMER_SESSION_PHONE_KEY);localStorage.removeItem("icuLauncherPhone");localStorage.removeItem("icuNewClientPhone");updateCustomerSessionUi()}
+async function refreshCustomerCloudProfile(renderAfter=true){
+ const phone=customerSessionPhone();if(!phone||!window.ICUCloud)return false;
+ try{
+  const cloudAppointments=await ICUCloud.customerLookup(phone);
+  if(Array.isArray(cloudAppointments)){
+   const blocked=loadAppointments().filter(a=>!normalizePhone(a.phone)&&!a.email),merged=[...blocked];
+   cloudAppointments.forEach(a=>{if(!merged.some(x=>x.id===a.id))merged.push(a)});
+   localStorage.setItem(APPOINTMENTS_KEY,JSON.stringify(merged));
+  }
+  if(renderAfter&&typeof currentViewName==="function"&&currentViewName()==="customer-profile")renderCustomerProfile();
+  return true;
+ }catch(error){console.error("Customer profile cloud refresh failed",error);return false}
+}
 function updateCustomerSessionUi(){const c=signedInCustomer(),status=$("#customerSessionStatus"),signOut=$("#customerSignOutButton");if(status)status.textContent=c?`Signed in: ${c.firstName} ${c.lastName}`:"";if(signOut)signOut.classList.toggle("hidden",!c)}
 function prefillSignedInCustomerBooking(){const c=signedInCustomer();if(!c)return false;$("#firstName").value=c.firstName||"";$("#lastName").value=c.lastName||"";$("#phone").value=formatPhone(c.phone);$("#email").value=c.email||"";updateBookingDepositNotice();updateBookingSummary();return true}
 function latestPriorAppointmentForCustomer(phone,email){
@@ -1834,4 +1847,17 @@ document.addEventListener("focusout",()=>{if(!pendingCloudViewRefresh)return;set
 window.addEventListener("icuCloudChanged",()=>{try{if(cloudRefreshControlActive()){pendingCloudViewRefresh=true;updateUnifiedNotifications();return}pendingCloudViewRefresh=false;applyCloudViewRefresh()}catch(_){}});
 window.addEventListener("icuCloudError",event=>{const message=event.detail?.message||"Supabase synchronization error.";try{toast(message)}catch(_){}});
 
-window.ICU_BSMS_VERSION="0.25-supabase-runtime";
+let customerMessagePollBusy=false;
+async function pollCustomerAppointmentMessages(){
+ if(customerMessagePollBusy||appMode()!=="customer"||document.hidden||!customerSessionPhone())return;
+ if(typeof currentViewName!=="function"||currentViewName()!=="customer-profile")return;
+ const a=document.activeElement;if(a&&(a.matches?.("input,textarea,select,[contenteditable=true]")||a.closest?.("dialog[open]")))return;
+ customerMessagePollBusy=true;
+ try{await refreshCustomerCloudProfile(true)}finally{customerMessagePollBusy=false}
+}
+window.setInterval(pollCustomerAppointmentMessages,12000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)setTimeout(pollCustomerAppointmentMessages,250)});
+window.addEventListener("pageshow",()=>setTimeout(pollCustomerAppointmentMessages,350));
+window.addEventListener("icuCustomerMessagesChanged",()=>{try{if(appMode()==="customer"&&typeof currentViewName==="function"&&currentViewName()==="customer-profile"&&!cloudRefreshControlActive())renderCustomerProfile()}catch(_){}});
+
+window.ICU_BSMS_VERSION="0.26.6-mobile-message-sync";
