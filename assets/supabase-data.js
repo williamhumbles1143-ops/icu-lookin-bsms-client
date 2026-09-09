@@ -5,6 +5,43 @@ const client=window.ICUAuth?.client || (window.supabase&&cfg?window.supabase.cre
 if(!client){console.error("ICU Cloud: Supabase unavailable");return;}
 
 const EDGE_URL=`${cfg.url}/functions/v1/public-booking`;
+
+// Public booking/portfolio endpoints do not require a JWT.  Keep these
+// requests CORS-simple on mobile networks: custom `apikey` headers and
+// application/json POSTs trigger an OPTIONS preflight that some mobile
+// Safari/network paths handle unreliably even when direct HTTPS works.
+const PUBLIC_RETRY_STATUSES=new Set([408,429,500,502,503,504,520,522,524]);
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function publicNetworkError(err){
+  return /load failed|failed to fetch|networkerror|network request failed|connection was lost|fetch failed/i.test(String(err?.message||err||""));
+}
+async function publicFetch(url,options={}){
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    const controller=typeof AbortController!=="undefined"?new AbortController():null;
+    const timer=controller?setTimeout(()=>controller.abort(),15000):null;
+    try{
+      const response=await fetch(url,{...options,cache:"no-store",credentials:"omit",...(controller?{signal:controller.signal}:{})});
+      if(timer)clearTimeout(timer);
+      if(attempt<2&&PUBLIC_RETRY_STATUSES.has(response.status)){await wait(350*(2**attempt));continue;}
+      return response;
+    }catch(err){
+      if(timer)clearTimeout(timer);
+      lastError=err;
+      const transient=err?.name==="AbortError"||publicNetworkError(err);
+      if(attempt>=2||!transient)throw err;
+      await wait(400*(2**attempt));
+    }
+  }
+  throw lastError||new TypeError("Network request failed");
+}
+function publicGet(url){return publicFetch(url,{method:"GET"});}
+function publicPost(url,payload){
+  // text/plain is deliberately used so Safari can send the POST without a
+  // preflight.  The Edge Function reads JSON from the body independent of
+  // the Content-Type header.
+  return publicFetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)});
+}
 const RUNTIME_ARRAY_KEYS={
   "icuLookinAppointmentsV3":"appointments",
   "icuCustomServicesV1":"custom_services",
@@ -230,7 +267,7 @@ async function hydrateStaff(){
   await hydrateNotificationReads();
 }
 async function publicState(){
-  const r=await fetch(`${EDGE_URL}?action=state`,{headers:{apikey:cfg.publishableKey}});
+  const r=await publicGet(`${EDGE_URL}?action=state`);
   const j=await r.json(); if(!r.ok||!j.ok)throw new Error(j.error||"Booking service unavailable.");
   const names=(j.barbers||[]).map(b=>b.display_name);
   if(Array.isArray(window.BARBERS))window.BARBERS.splice(0,window.BARBERS.length,...names);
@@ -308,11 +345,11 @@ function startRealtime(){
     .subscribe();
 }
 async function createBooking(booking){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"create",booking})});
+  const r=await publicPost(EDGE_URL,{action:"create",booking});
   const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Unable to save appointment.");return j.booking;
 }
 async function customerLookup(phone){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"lookup",phone})});
+  const r=await publicPost(EDGE_URL,{action:"lookup",phone});
   const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Unable to find profile.");
   const d=String(phone||"").replace(/\D/g,"").slice(-10),key=`phone:${d}`,family=safeParse(localStorage.getItem("icuFamilyV1"),{}),prefs=safeParse(localStorage.getItem("icuPreferencesV1"),{});
   if(j.profile){family[key]=j.profile.family||[];prefs[key]=j.profile.preferences||{};rawSet("icuFamilyV1",family);rawSet("icuPreferencesV1",prefs)}
@@ -328,19 +365,19 @@ async function customerLookup(phone){
   return appointments;
 }
 async function saveCustomerProfile(phone,family,preferences){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"save_profile",phone,family,preferences})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Profile could not be saved.");return true;
+  const r=await publicPost(EDGE_URL,{action:"save_profile",phone,family,preferences});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Profile could not be saved.");return true;
 }
 async function submitCustomerReview(phone,review){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"review",phone,review})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Review could not be saved.");return j.review;
+  const r=await publicPost(EDGE_URL,{action:"review",phone,review});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Review could not be saved.");return j.review;
 }
 async function sendCustomerAppointmentMessage(phone,message){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"appointment_message",phone,message})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Message could not be sent.");return j.message;
+  const r=await publicPost(EDGE_URL,{action:"appointment_message",phone,message});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Message could not be sent.");return j.message;
 }
 async function createGiftCardCloud(recipient,email,amount){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"gift_create",recipient,email,amount})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Gift card could not be created.");return j.card;
+  const r=await publicPost(EDGE_URL,{action:"gift_create",recipient,email,amount});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Gift card could not be created.");return j.card;
 }
 async function lookupGiftCardCloud(code){
-  const r=await fetch(EDGE_URL,{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.publishableKey},body:JSON.stringify({action:"gift_lookup",code})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Gift card lookup failed.");return j.card||null;
+  const r=await publicPost(EDGE_URL,{action:"gift_lookup",code});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Gift card lookup failed.");return j.card||null;
 }
 async function sendMessage(key,sender,body){
   const id=`msg-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -385,7 +422,7 @@ async function saveEditedSocial(source,blob,name){
 
 async function clientPortfolio(barber){
   const url=`${cfg.url}/functions/v1/public-portfolio?barber=${encodeURIComponent(String(barber||""))}`;
-  const r=await fetch(url,{headers:{apikey:cfg.publishableKey}});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Portfolio unavailable.");return j.items||[];
+  const r=await publicGet(url);const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Portfolio unavailable.");return j.items||[];
 }
 
 async function uploadOwnerDocuments(files){
