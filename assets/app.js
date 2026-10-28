@@ -823,8 +823,8 @@ function customerByLookup(value){const digits=normalizePhone(value);if(digits.le
 function customerStorageKey(c){return normalizePhone(c.phone)?`phone:${normalizePhone(c.phone)}`:`email:${String(c.email||"").toLowerCase()}`}
 function customerSessionPhone(){return normalizePhone(sessionStorage.getItem(CUSTOMER_SESSION_PHONE_KEY)||"")}
 function signedInCustomer(){const phone=customerSessionPhone();return phone?customerByLookup(phone):null}
-function setCustomerSession(customerOrPhone){const phone=normalizePhone(typeof customerOrPhone==="string"?customerOrPhone:customerOrPhone?.phone);if(phone)sessionStorage.setItem(CUSTOMER_SESSION_PHONE_KEY,phone);updateCustomerSessionUi();return phone}
-function clearCustomerSession(){sessionStorage.removeItem(CUSTOMER_SESSION_PHONE_KEY);localStorage.removeItem("icuLauncherPhone");localStorage.removeItem("icuNewClientPhone");updateCustomerSessionUi()}
+function setCustomerSession(customerOrPhone){const phone=normalizePhone(typeof customerOrPhone==="string"?customerOrPhone:customerOrPhone?.phone);if(phone){sessionStorage.setItem(CUSTOMER_SESSION_PHONE_KEY,phone);localStorage.setItem("icuLauncherPhone",phone);localStorage.removeItem("icuClientExplicitlySignedOutV1")}updateCustomerSessionUi();return phone}
+function clearCustomerSession(){sessionStorage.removeItem(CUSTOMER_SESSION_PHONE_KEY);localStorage.removeItem("icuLauncherPhone");localStorage.removeItem("icuNewClientPhone");localStorage.setItem("icuClientExplicitlySignedOutV1","1");updateCustomerSessionUi()}
 async function refreshCustomerCloudProfile(renderAfter=true){
  const phone=customerSessionPhone();if(!phone||!window.ICUCloud)return false;
  try{
