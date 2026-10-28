@@ -1,4 +1,4 @@
-const ICU_CLIENT_SW_VERSION="0.28.1";
+const ICU_CLIENT_SW_VERSION="0.28.2";
 const DEFAULT_ICON="assets/icu-lookin-logo.jpeg";
 
 self.addEventListener("install",()=>self.skipWaiting());
@@ -25,23 +25,45 @@ async function clearBadge(){
 
 self.addEventListener("push",event=>{
   let data={};
-  try{data=event.data?event.data.json():{}}catch(_){data={body:event.data?event.data.text():"You have a new ICU Lookin update."}}
+  try{data=event.data?event.data.json():{}}
+  catch(_){data={body:event.data?event.data.text():"You have a new ICU Lookin update."}}
+
   const title=data.title||"ICU Lookin Barber Studio";
+  const body=data.body||"Open the Client App to view the update.";
+  const tag=data.tag||("icu-client-"+Date.now());
   const options={
-    body:data.body||"Open the Client App to view the update.",
+    body,
     icon:data.icon||DEFAULT_ICON,
-    tag:data.tag||("icu-client-"+Date.now()),
+    tag,
     renotify:true,
-    data:{url:data.url||"CLIENT_LAUNCHER.html?push=profile",type:data.type||"notification"}
+    data:{
+      url:data.url||"CLIENT_LAUNCHER.html?push=profile",
+      type:data.type||"notification",
+      title,
+      body,
+      tag
+    }
   };
-  event.waitUntil(Promise.all([setBadge(data.badge||1),self.registration.showNotification(title,options)]));
+  event.waitUntil(Promise.all([
+    setBadge(data.badge||1),
+    self.registration.showNotification(title,options)
+  ]));
 });
 
 self.addEventListener("notificationclick",event=>{
   event.notification.close();
   event.waitUntil((async()=>{
     await clearBadge();
-    const target=new URL(event.notification?.data?.url||"CLIENT_LAUNCHER.html?push=profile",self.registration.scope).href;
+
+    const info=event.notification?.data||{};
+    const targetUrl=new URL(info.url||"CLIENT_LAUNCHER.html?push=profile",self.registration.scope);
+    targetUrl.searchParams.set("push","profile");
+    if(info.title)targetUrl.searchParams.set("push_title",String(info.title));
+    if(info.body)targetUrl.searchParams.set("push_body",String(info.body));
+    if(info.type)targetUrl.searchParams.set("push_type",String(info.type));
+    if(info.tag)targetUrl.searchParams.set("push_tag",String(info.tag));
+    const target=targetUrl.href;
+
     const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
     for(const client of windows){
       if("focus" in client){
@@ -58,6 +80,7 @@ self.addEventListener("notificationclick",event=>{
 self.addEventListener("message",event=>{
   if(event.data?.type==="ICU_CLEAR_BADGE")event.waitUntil(clearBadge());
 });
+
 self.addEventListener("fetch",event=>{
   if(event.request.mode==="navigate")event.waitUntil(clearBadge());
 });
