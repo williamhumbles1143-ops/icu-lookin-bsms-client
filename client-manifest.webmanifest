@@ -1,0 +1,14 @@
+{
+  "id":"./CLIENT_LAUNCHER.html",
+  "name":"ICU Lookin Client",
+  "short_name":"ICU Client",
+  "description":"ICU Lookin Barber Studio client booking and appointment notifications.",
+  "start_url":"./CLIENT_LAUNCHER.html?source=pwa",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#111111",
+  "theme_color":"#111111",
+  "icons":[
+    {"src":"assets/icu-lookin-logo.jpeg","sizes":"any","type":"image/jpeg","purpose":"any"}
+  ]
+}
