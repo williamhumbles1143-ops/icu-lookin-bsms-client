@@ -305,12 +305,18 @@
     return false;
   }
 
+  function wireExplicitSignOut(){
+    document.getElementById("customerSignOutButton")?.addEventListener("click",()=>localStorage.setItem(SIGNED_OUT_KEY,"1"),true);
+    document.getElementById("customerExitButton")?.addEventListener("click",()=>localStorage.setItem(SIGNED_OUT_KEY,"1"),true);
+  }
+
   async function boot(){
     const mode=window.__ICU_EARLY_MODE__||new URLSearchParams(location.search).get("app")||sessionStorage.getItem("icuAppMode")||"";
     if(/BSMS_APP\.html$/i.test(location.pathname)&&mode&&mode!=="customer")return;
 
     if(await handlePushOpen())return;
 
+    wireExplicitSignOut();
     try{await ensureRegistration();await clearBadge()}catch(_){}
     await refreshPanel();
     renderNotificationCard();
