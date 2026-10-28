@@ -12,7 +12,8 @@
   const cfg=()=>window.ICU_SUPABASE_CONFIG||null;
   const isIOS=()=>/iPhone|iPad|iPod/i.test(navigator.userAgent||"");
   const isStandalone=()=>window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone===true;
-  const currentPhone=()=>norm(sessionStorage.getItem(SESSION_KEY)||localStorage.getItem("icuLauncherPhone")||localStorage.getItem(PUSH_PHONE_KEY)||"");
+  const currentPhone=()=>norm(sessionStorage.getItem(SESSION_KEY)||localStorage.getItem("icuLauncherPhone")||"");
+  const boundPushPhone=()=>norm(localStorage.getItem(PUSH_PHONE_KEY)||"");
 
   function urlBase64ToUint8Array(base64String){
     const padding="=".repeat((4-base64String.length%4)%4);
@@ -122,6 +123,10 @@
     ensurePanel();
     const phone=currentPhone();
     if(phone.length!==10){
+      if(boundPushPhone().length===10){
+        statusEl.textContent="Notifications remain active on this phone. Open your client profile to manage them.";
+        button.textContent="Notifications On";button.disabled=true;return;
+      }
       statusEl.textContent="Open your client profile first. Then you can turn on confirmations and barber-message alerts.";
       button.textContent="Enable Notifications";button.disabled=true;return;
     }
@@ -151,15 +156,24 @@
   async function handlePushOpen(){
     const params=new URLSearchParams(location.search);
     if(params.get("push")!=="profile")return false;
-    const phone=norm(localStorage.getItem(PUSH_PHONE_KEY)||"");
-    if(phone.length!==10)return false;
-    sessionStorage.setItem(SESSION_KEY,phone);
-    localStorage.setItem("icuLauncherPhone",phone);
-    location.replace("CUSTOMER_BOOKING_APP.html#customer-profile");
-    return true;
+    await clearBadge();
+    const phone=norm(sessionStorage.getItem(SESSION_KEY)||"");
+    if(phone.length===10){
+      localStorage.setItem("icuLauncherPhone",phone);
+      location.replace("CUSTOMER_BOOKING_APP.html#customer-profile");
+      return true;
+    }
+    try{
+      const clean=new URL(location.href);
+      clean.searchParams.delete("push");
+      history.replaceState(null,"",clean.pathname+clean.search+clean.hash);
+    }catch(_){}
+    return false;
   }
 
   async function boot(){
+    const mode=window.__ICU_EARLY_MODE__||new URLSearchParams(location.search).get("app")||sessionStorage.getItem("icuAppMode")||"";
+    if(/BSMS_APP\.html$/i.test(location.pathname)&&mode&&mode!=="customer")return;
     if(await handlePushOpen())return;
     try{await ensureRegistration();await clearBadge()}catch(_){}
     await refreshPanel();
