@@ -1,10 +1,11 @@
 (function(){
   "use strict";
-  const VERSION="0.28.2";
+  const VERSION="0.28.3";
   const SESSION_KEY="icuCustomerSessionPhoneV1";
   const PUSH_PHONE_KEY="icuClientPushPhoneV1";
   const LAST_NOTIFICATION_KEY="icuClientLastNotificationV1";
   const JUST_OPENED_KEY="icuClientPushJustOpenedV1";
+  const SIGNED_OUT_KEY="icuClientExplicitlySignedOutV1";
   let registrationPromise=null;
   let panel=null;
   let statusEl=null;
@@ -107,6 +108,9 @@
     });
 
     localStorage.setItem(PUSH_PHONE_KEY,phone);
+    localStorage.setItem("icuLauncherPhone",phone);
+    localStorage.removeItem(SIGNED_OUT_KEY);
+    sessionStorage.setItem(SESSION_KEY,phone);
     removePanel();
     return true;
   }
@@ -284,12 +288,13 @@
     saveOpenedNotification(params);
     await clearBadge();
 
+    const explicitlySignedOut=localStorage.getItem(SIGNED_OUT_KEY)==="1";
     const storedPhone=norm(localStorage.getItem("icuLauncherPhone")||"");
     const sessionPhone=norm(sessionStorage.getItem(SESSION_KEY)||"");
     const bound=boundPushPhone();
-    const phone=sessionPhone||storedPhone;
 
-    if(phone.length===10&&bound.length===10&&phone===bound){
+    if(!explicitlySignedOut&&bound.length===10){
+      const phone=(sessionPhone===bound||storedPhone===bound)?bound:bound;
       sessionStorage.setItem(SESSION_KEY,phone);
       localStorage.setItem("icuLauncherPhone",phone);
       location.replace("CUSTOMER_BOOKING_APP.html#customer-profile");
