@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  const VERSION="0.28.0";
+  const VERSION="0.28.1";
   const SESSION_KEY="icuCustomerSessionPhoneV1";
   const PUSH_PHONE_KEY="icuClientPushPhoneV1";
   let registrationPromise=null;
