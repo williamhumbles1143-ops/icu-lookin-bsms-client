@@ -1,4 +1,4 @@
-const ICU_CLIENT_SW_VERSION="0.28.0";
+const ICU_CLIENT_SW_VERSION="0.28.1";
 const DEFAULT_ICON="assets/icu-lookin-logo.jpeg";
 
 self.addEventListener("install",()=>self.skipWaiting());
